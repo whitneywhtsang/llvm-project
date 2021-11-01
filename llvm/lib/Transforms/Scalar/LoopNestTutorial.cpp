@@ -23,14 +23,50 @@ public:
 
   bool run(LoopNest &LN) const {
     LLVM_DEBUG(dbgs() << "Entering LoopNestTutorial::run\n");
-    LLVM_DEBUG(
-        dbgs() << "TODO: Need to check if LoopNest is a valid candidate\n");
+    if (!isCandidate(LN)) {
+      LLVM_DEBUG(dbgs() << "Loop nest " << LN.getName()
+                        << " is not a candidate for interchanging.\n");
+      return false;
+    }
+
+    LLVM_DEBUG(dbgs() << "Loop nest " << LN.getName()
+                      << " is a candidate for interchanging!\n");
+
     (void)LI;
     (void)DT;
     return false;
   }
 
 private:
+  /// Determines if \p LN is a candidate for interchanging.
+  bool isCandidate(const LoopNest &LN) const {
+    assert(LN.areAllLoopsSimplifyForm() &&
+           "Expecting all loops are in simplify form");
+
+    if (!LN.areAllLoopsRotatedForm()) {
+      LLVM_DEBUG(dbgs() << "Only rotated loop nests are considered.\n");
+      return false;
+    }
+
+    if (!LN.getOutermostLoop().getExitBlock()) {
+      LLVM_DEBUG(dbgs() << "Only loop nests with single exit outermost loop "
+                           "are considered.\n");
+      return false;
+    }
+
+    if (LN.getNestDepth() != 2) {
+      LLVM_DEBUG(dbgs() << "Only loop nests with depth two are considered.\n");
+      return false;
+    }
+
+    if (LN.getMaxPerfectDepth() != LN.getNestDepth()) {
+      LLVM_DEBUG(dbgs() << "Only perfect loop nests are considered.\n");
+      return false;
+    }
+
+    return true;
+  }
+
   LoopInfo *LI = nullptr;
   DominatorTree *DT = nullptr;
 };

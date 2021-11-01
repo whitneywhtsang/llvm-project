@@ -4,7 +4,7 @@
 ; CHECK: Entering LoopNestTutorialPass::run
 ; CHECK-NEXT: LoopNest: IsPerfect=true, Depth=2, OutermostLoop: header.outer, Loops: ( header.outer header.inner )
 ; CHECK-NEXT: Entering LoopNestTutorial::run
-; CHECK-NEXT: TODO: Need to check if LoopNest is a valid candidate
+; CHECK-NEXT: Loop nest header.outer is a candidate for interchanging!
 
 define void @perfectloopnest() {
 preheader.outer:
