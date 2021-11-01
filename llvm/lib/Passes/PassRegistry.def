@@ -458,6 +458,7 @@ FUNCTION_PASS_WITH_PARAMS("print<stack-lifetime>",
 LOOPNEST_PASS("lnicm", LNICMPass())
 LOOPNEST_PASS("loop-flatten", LoopFlattenPass())
 LOOPNEST_PASS("loop-interchange", LoopInterchangePass())
+LOOPNEST_PASS("loop-nest-tutorial", LoopNestTutorialPass())
 LOOPNEST_PASS("loop-unroll-and-jam", LoopUnrollAndJamPass())
 LOOPNEST_PASS("no-op-loopnest", NoOpLoopNestPass())
 #undef LOOPNEST_PASS
