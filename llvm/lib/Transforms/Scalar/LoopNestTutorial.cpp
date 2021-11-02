@@ -12,10 +12,12 @@
 
 #include "llvm/Transforms/Scalar/LoopNestTutorial.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
 using namespace llvm;
 
 #define DEBUG_TYPE "loop-nest-tutorial"
+static const char *VerboseDebug = DEBUG_TYPE "-verbose";
 
 class LoopNestTutorial {
 public:
@@ -32,9 +34,8 @@ public:
     LLVM_DEBUG(dbgs() << "Loop nest " << LN.getName()
                       << " is a candidate for interchanging!\n");
 
-    (void)LI;
-    (void)DT;
-    return false;
+    loopInterchange(LN);
+    return true;
   }
 
 private:
@@ -65,6 +66,109 @@ private:
     }
 
     return true;
+  }
+
+  /// Perform loop interchange of the given 2-levels perfect loop nest.
+  void loopInterchange(const LoopNest &LN) const {
+    Loop &OuterLoop = LN.getOutermostLoop();
+    Loop &InnerLoop = *LN.getInnermostLoop();
+
+    BasicBlock &InnerHeader = *InnerLoop.getHeader();
+    SplitBlock(&InnerHeader, InnerHeader.getFirstNonPHI(), DT, LI, nullptr,
+               "loopbodyfirst");
+    BasicBlock &LoopNestBodyLast = *InnerLoop.getLoopLatch();
+    SplitBlock(&LoopNestBodyLast, LoopNestBodyLast.getTerminator(), DT, LI,
+               nullptr, "latch.inner");
+
+    LLVM_DEBUG({
+      dbgs() << "After split blocks:\n";
+      LN.getParent()->dump();
+    });
+
+    adjustLoopBranches(OuterLoop, InnerLoop);
+    LLVM_DEBUG({
+      dbgs() << "After adjust loop branches:\n";
+      LN.getParent()->dump();
+    });
+
+    restructureLoops(OuterLoop, InnerLoop);
+  }
+
+  /// Adjust loop branches and update DominatorTree.
+  void adjustLoopBranches(Loop &OuterLoop, Loop &InnerLoop) const {
+    BasicBlock &OuterPreheader = *OuterLoop.getLoopPreheader();
+    BasicBlock &OuterHeader = *OuterLoop.getHeader();
+    BasicBlock &OuterLatch = *OuterLoop.getLoopLatch();
+    BasicBlock &OuterExit = *OuterLoop.getExitBlock();
+    BasicBlock &InnerPreheader = *InnerLoop.getLoopPreheader();
+    BasicBlock &InnerHeader = *InnerLoop.getHeader();
+    BasicBlock &InnerLatch = *InnerLoop.getLoopLatch();
+    BasicBlock &InnerExit = *InnerLoop.getExitBlock();
+    BasicBlock &LoopNestBodyFirst = *InnerHeader.getUniqueSuccessor();
+    BasicBlock &LoopNestBodyLast = *InnerLatch.getUniquePredecessor();
+
+    DEBUG_WITH_TYPE(VerboseDebug, {
+      dbgs() << "OuterPreheader " << OuterPreheader << "\n";
+      dbgs() << "OuterHeader " << OuterHeader << "\n";
+      dbgs() << "OuterLatch " << OuterLatch << "\n";
+      dbgs() << "OuterExit " << OuterExit << "\n";
+      dbgs() << "InnerPreheader " << InnerPreheader << "\n";
+      dbgs() << "InnerHeader " << InnerHeader << "\n";
+      dbgs() << "LoopNestBodyFirst " << LoopNestBodyFirst << "\n";
+      dbgs() << "LoopNestBodyLast " << LoopNestBodyLast << "\n";
+      dbgs() << "InnerLatch " << InnerLatch << "\n";
+      dbgs() << "InnerExit " << InnerExit << "\n";
+    });
+
+    SmallVector<DominatorTree::UpdateType, 4> DTUpdates;
+    auto UpdateSuccessor = [&DTUpdates](BasicBlock &BB, BasicBlock &OldSucc,
+                                        BasicBlock &NewSucc) {
+      BranchInst *BI = dyn_cast<BranchInst>(BB.getTerminator());
+      assert(BI && "Expecting BB to be terminated by a BranchInst");
+      for (unsigned I = 0; I < BI->getNumSuccessors(); ++I)
+        if (&OldSucc == BI->getSuccessor(I))
+          BI->setSuccessor(I, &NewSucc);
+      DTUpdates.push_back({DominatorTree::UpdateKind::Delete, &BB, &OldSucc});
+      DTUpdates.push_back({DominatorTree::UpdateKind::Insert, &BB, &NewSucc});
+    };
+
+    UpdateSuccessor(OuterPreheader, OuterHeader, InnerHeader);
+    UpdateSuccessor(InnerHeader, LoopNestBodyFirst, OuterHeader);
+    UpdateSuccessor(InnerPreheader, InnerHeader, LoopNestBodyFirst);
+    OuterHeader.replacePhiUsesWith(&OuterPreheader, &InnerHeader);
+    InnerHeader.replacePhiUsesWith(&InnerPreheader, &OuterPreheader);
+
+    UpdateSuccessor(LoopNestBodyLast, InnerLatch, InnerExit);
+    UpdateSuccessor(OuterLatch, OuterExit, InnerLatch);
+    UpdateSuccessor(InnerLatch, InnerExit, OuterExit);
+    InnerExit.replacePhiUsesWith(&InnerLatch, &LoopNestBodyLast);
+    OuterExit.replacePhiUsesWith(&OuterLatch, &InnerLatch);
+    DT->applyUpdates(DTUpdates);
+  }
+
+  /// Update LoopInfo, after interchanging. OuterLoop is the original outer loop
+  /// and InnerLoop is the original inner loop.
+  void restructureLoops(Loop &OuterLoop, Loop &InnerLoop) const {
+    OuterLoop.removeChildLoop(&InnerLoop);
+    LI->changeTopLevelLoop(&OuterLoop, &InnerLoop);
+    InnerLoop.addChildLoop(&OuterLoop);
+    for (BasicBlock *BB : OuterLoop.blocks())
+      if (LI->getLoopFor(BB) == &OuterLoop)
+        InnerLoop.addBlockEntry(BB);
+
+    BasicBlock &InnerHeader = *InnerLoop.getHeader();
+    BasicBlock &InnerLatch = *InnerLoop.getLoopLatch();
+    OuterLoop.removeBlockFromLoop(&InnerHeader);
+    OuterLoop.removeBlockFromLoop(&InnerLatch);
+    for (BasicBlock *BB : OuterLoop.blocks())
+      if (LI->getLoopFor(BB) == &InnerLoop)
+        LI->changeLoopFor(BB, &OuterLoop);
+    DEBUG_WITH_TYPE(VerboseDebug, {
+      dbgs() << "InnerLoop ";
+      InnerLoop.dump();
+      dbgs() << "OuterLoop ";
+      OuterLoop.dump();
+    });
   }
 
   LoopInfo *LI = nullptr;
