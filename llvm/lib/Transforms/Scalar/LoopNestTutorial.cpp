@@ -23,6 +23,8 @@ public:
 
   bool run(LoopNest &LN) const {
     LLVM_DEBUG(dbgs() << "Entering LoopNestTutorial::run\n");
+
+    // New: determine whether a loop nest is a candidate for our tranformation.
     if (!isCandidate(LN)) {
       LLVM_DEBUG(dbgs() << "Loop nest " << LN.getName()
                         << " is not a candidate for interchanging.\n");
@@ -38,7 +40,8 @@ public:
   }
 
 private:
-  /// Determines if \p LN is a candidate for interchanging.
+  /// Determines if \p LN is a candidate for loop interchange.
+  /// Here we can use a number of handy utilities from the LoopNest class.
   bool isCandidate(const LoopNest &LN) const {
     assert(LN.areAllLoopsSimplifyForm() &&
            "Expecting all loops are in simplify form");
