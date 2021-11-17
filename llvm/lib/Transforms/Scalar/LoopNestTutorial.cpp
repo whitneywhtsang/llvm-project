@@ -17,6 +17,7 @@ using namespace llvm;
 
 #define DEBUG_TYPE "loop-nest-tutorial"
 
+// This class will contain the main transformation code.
 class LoopNestTutorial {
 public:
   LoopNestTutorial(LoopInfo *LI, DominatorTree *DT) : LI(LI), DT(DT) {}
@@ -35,6 +36,8 @@ private:
   DominatorTree *DT = nullptr;
 };
 
+// Verify that the transformation preserved correctness of analysis data
+// structures, and proper function code structure.
 static void verify(const LoopInfo &LI, const DominatorTree &DT) {
   Function &F = *(*LI.begin())->getHeader()->getParent();
   assert(!verifyFunction(F, &errs()) && "Incorrect Function");
@@ -49,16 +52,21 @@ PreservedAnalyses LoopNestTutorialPass::run(LoopNest &LN,
 
   LLVM_DEBUG(dbgs() << "Entering LoopNestTutorialPass::run\n");
 
-  // auto *DT = &AM.getResult<DominatorTreeAnalysis>(F);
-  // auto *LI = &AM.getResult<LoopAnalysis>(F);
-  // auto *SE = &AM.getResult<ScalarEvolutionAnalysis>(F);
-  // bool Simplified = false;
-  // for (const auto *L : *LI) {
-  //   Simplified |= simplifyLoop(L, DT, LI, SE, nullptr, nullptr, true);
-  //   LoopNest LN(*L, *SE);
+  // The implementation of the pass run method is simpler.
+  // If we were using a function pass we would have to write code to simplify
+  // the loop, and create a loop nest object. Example:
+  //    auto *DT = &AM.getResult<DominatorTreeAnalysis>(F);
+  //    auto *LI = &AM.getResult<LoopAnalysis>(F);
+  //    auto *SE = &AM.getResult<ScalarEvolutionAnalysis>(F);
+  //    bool Simplified = false;
+  //    for (const auto *L : *LI) {
+  //      Simplified |= simplifyLoop(L, DT, LI, SE, nullptr, nullptr, true);
+  //      LoopNest LN(*L, *SE);
+  //      ...
+  //    }
+
   LLVM_DEBUG(dbgs() << "LoopNest: " << LN << "\n");
   bool Changed = LoopNestTutorial(&AR.LI, &AR.DT).run(LN);
-  // }
 
   if (!Changed)
     return PreservedAnalyses::all();

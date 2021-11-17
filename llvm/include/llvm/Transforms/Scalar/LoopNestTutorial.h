@@ -20,10 +20,13 @@
 
 namespace llvm {
 
+// Creating a LoopNest pass is almost the same as creating a Loop pass.
 class LoopNestTutorialPass : public PassInfoMixin<LoopNestTutorialPass> {
 public:
   LoopNestTutorialPass() = default;
 
+  // One difference: note that the run method takes a LoopNest object rather
+  // than a Loop.
   PreservedAnalyses run(LoopNest &LN, LoopAnalysisManager &LAM,
                         LoopStandardAnalysisResults &AR, LPMUpdater &U);
 };
