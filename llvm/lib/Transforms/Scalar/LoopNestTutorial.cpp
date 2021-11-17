@@ -68,7 +68,9 @@ private:
     return true;
   }
 
-  /// Perform loop interchange of the given 2-levels perfect loop nest.
+  /// New: Perform loop interchange of the given 2-levels perfect loop nest.
+  /// Note: for a proper LoopInterchange implementation please refer to the pass
+  /// in LLVM.
   void loopInterchange(const LoopNest &LN) const {
     Loop &OuterLoop = LN.getOutermostLoop();
     Loop &InnerLoop = *LN.getInnermostLoop();
@@ -94,7 +96,10 @@ private:
     restructureLoops(OuterLoop, InnerLoop);
   }
 
-  /// Adjust loop branches and update DominatorTree.
+  /// Adjust loop branches (to interchange the loops).
+  /// Note: like for loop transformation passes we are responsible for
+  /// maintaining the dominator tree up to date (so that other transformations
+  /// can still use it).
   void adjustLoopBranches(Loop &OuterLoop, Loop &InnerLoop) const {
     BasicBlock &OuterPreheader = *OuterLoop.getLoopPreheader();
     BasicBlock &OuterHeader = *OuterLoop.getHeader();
@@ -148,6 +153,8 @@ private:
 
   /// Update LoopInfo, after interchanging. OuterLoop is the original outer loop
   /// and InnerLoop is the original inner loop.
+  /// Note: the LoopInfo data structure needs to be updated to reflect the
+  /// changes that this transformation has made.
   void restructureLoops(Loop &OuterLoop, Loop &InnerLoop) const {
     OuterLoop.removeChildLoop(&InnerLoop);
     LI->changeTopLevelLoop(&OuterLoop, &InnerLoop);
@@ -196,14 +203,16 @@ PreservedAnalyses LoopNestTutorialPass::run(LoopNest &LN,
   // for (const auto *L : *LI) {
   //   Simplified |= simplifyLoop(L, DT, LI, SE, nullptr, nullptr, true);
   //   LoopNest LN(*L, *SE);
+  // }
   LLVM_DEBUG(dbgs() << "LoopNest: " << LN << "\n");
   bool Changed = LoopNestTutorial(&AR.LI, &AR.DT).run(LN);
-  // }
 
   if (!Changed)
     return PreservedAnalyses::all();
 
   verify(AR.LI, AR.DT);
 
+  // Similar to a loop pass: need to preserve the analysis cached in
+  // LoopStandardAnalysisResults.
   return getLoopPassPreservedAnalyses();
 }
